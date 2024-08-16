@@ -56,12 +56,11 @@ export class RpcService implements OnApplicationBootstrap {
 
     const _pvtKey = this.configService.get('PRIVATE_KEY');
     this.wallet = new ethers.Wallet(
-      _pvtKey ? _pvtKey : defaultConfig[this.env].PRIVATE_KEY,
+      _pvtKey ? _pvtKey : defaultConfig[this.env].READ_ONLY_PVT_KEY,
       this.provider,
     );
 
-    this.contractAddress = defaultConfig[this.env].contractAddress;
-
+    this.contractAddress = defaultConfig[this.env].CONTRACT_ADDRESS;
     this.pingPongABI = new ethers.Interface(PingPongABI);
   }
 
@@ -81,37 +80,44 @@ export class RpcService implements OnApplicationBootstrap {
       `Adding event listeners to ping pong contract on address ${this.contractAddress}`,
     );
 
-    this.contract.on(EventTypes.PING, async (txHash: string) => {
+    this.contract.on(EventTypes.PING, async (event: any) => {
       try {
-        this.logger.info(`Received Ping event with txHash: ${txHash}`);
+      // Extract the transactionHash from the event's log
+      const txHash = event?.log?.transactionHash;
 
-        const tx = await this.contract.pong(txHash);
-        this.logger.info(
-          `Sent pong for Ping at ${txHash}, transaction: ${tx.hash}`,
-        );
+      if (!txHash) {
+        throw new Error('Transaction hash is missing from the event.');
+      }
 
-        const eventData: BASE_EVENT_DATA = {
-          txHash,
-          timestamp: Date.now(),
-        };
+      this.logger.info(`Received Ping event with txHash: ${txHash}`);
 
-        const { id: jobId } = await this.logsQueue.add(
-          QUEUE_JOB_NAMES.PONG_TRANSACTION,
-          {
-            data: eventData,
-          },
-          {
-            attempts: 3, // retry 3 times max
-            backoff: {
-              type: 'exponential', // exponential backoff strategy
-              delay: 1000, // initial delay of 1s, increasing exponentially
-            },
-          },
-        );
-        this.logger.info(`Added new join challenge job [jobId : ${jobId}]`);
+      // const tx = await this.contract.pong(txHash);
+      // this.logger.info(
+      //   `Sent pong for Ping at ${txHash}, transaction: ${tx.hash}`,
+      // );
+
+      const eventData: BASE_EVENT_DATA = {
+        txHash,
+        timestamp: Date.now(),
+      };
+
+      // const { id: jobId } = await this.logsQueue.add(
+      //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
+      //   {
+      //     data: eventData,
+      //   },
+      //   {
+      //     attempts: 3, // retry 3 times max
+      //     backoff: {
+      //       type: 'exponential', // exponential backoff strategy
+      //       delay: 1000, // initial delay of 1s, increasing exponentially
+      //     },
+      //   },
+      // );
+      this.logger.info(`Added new join challenge job [jobId :]`);
       } catch (error) {
         this.logger.error(
-          `Error processing Ping event with txHash: ${txHash} : ${error.stack}`,
+          `Error processing Ping event with txHash: ${JSON.stringify(event)} : ${error.stack}`,
         );
       }
     });
