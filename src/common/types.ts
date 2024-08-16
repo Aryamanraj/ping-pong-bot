@@ -1,0 +1,22 @@
+export const EventTypes = {
+  PING: 'Ping',
+  PONG: 'Pong',
+  NEW_PINGER: 'NewPinger',
+};
+
+export const TransactionTypes = {
+  DEPOSIT: 'DEPOSIT',
+  WITHDRAW: 'WITHDRAW',
+  SETTLING: 'SETTLING',
+  SETTLEMENT: 'SETTLEMENT',
+  PARTICIPATION: 'PARTICIPATION',
+  SIDE_WAGER: 'SIDE_WAGER',
+  REFUND: 'REFUND',
+  JOIN_CHALLANGE: 'PARTICIPATION_EVENT',
+};
+
+export enum EVENT_TYPE {
+  CREDITS = 'CREDITS',
+  VOTE = 'VOTE',
+  MULTI_TOKEN_ESCROW = 'MULTI_TOKEN_ESCROW',
+}
