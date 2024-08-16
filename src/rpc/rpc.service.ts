@@ -10,7 +10,12 @@ import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bull';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { EVENT_TYPE, EventTypes, TransactionTypes } from '../common/types';
-import { QUEUE_JOB_NAMES, QueueNames } from '../common/constants';
+import {
+  QUEUE_JOB_NAMES,
+  QueueNames,
+  TX_EVENT_TYPE,
+  TX_STATE_TYPE,
+} from '../common/constants';
 import { Logger } from 'winston';
 
 import { Promisify } from '../common/helpers/promisifier';
@@ -42,6 +47,7 @@ export class RpcService implements OnApplicationBootstrap {
   private pingPongABI: ethers.Interface;
   private env: string;
   private wsProvider: ethers.WebSocketProvider;
+  private chain: string;
 
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
@@ -77,6 +83,8 @@ export class RpcService implements OnApplicationBootstrap {
     );
     this.contractAddress = defaultConfig[this.env].CONTRACT_ADDRESS;
     this.pingPongABI = new ethers.Interface(PingPongABI);
+
+    this.chain = defaultConfig[this.env].CHAIN;
   }
 
   private async initConnection() {
@@ -99,18 +107,36 @@ export class RpcService implements OnApplicationBootstrap {
       try {
         // Extract the transaction hash from the event's log
         const txHash = event?.log?.transactionHash as string;
-        const blockNumber = event?.log?.blockNumber as number;
-        const logIndex = event?.log?.index as number;
+        const blockNumber = (event?.log?.blockNumber as number) ?? null;
+        const logIndex = (event?.log?.index as number) ?? null;
 
         if (!txHash) {
           throw new Error('Transaction hash is missing from the event.');
         }
+
+        const newTx = new Transaction();
+
+        newTx.TxHash = txHash;
+        newTx.BlockNumber = blockNumber;
+        newTx.LogIndex = logIndex;
+        newTx.TxType = TX_EVENT_TYPE.PING;
+        newTx.TxState = TX_STATE_TYPE.PINGED;
+        newTx.Network = this.chain;
+
+        // Fetch the block details to get the timestamp
+        const block = blockNumber
+          ? await this.provider.getBlock(blockNumber)
+          : null;
+        const timestamp = block?.timestamp ?? null;
+        newTx.Timestamp = timestamp;
 
         this.logger.info(
           `Received Ping event with txHash: ${txHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}, event: ${JSON.stringify(
             event,
           )}`,
         );
+
+        await newTx.save();
 
         // Handle the Ping event as needed
         const eventData: BASE_EVENT_DATA = {
@@ -302,13 +328,53 @@ export class RpcService implements OnApplicationBootstrap {
     try {
       this.logger.info(`Processing send pong [data : ${JSON.stringify(data)}]`);
 
-      // Call the pong function on the contract using the txHash from the event data
-      const tx = await this.contract.pong(ethers.id(data.txHash));
+      const transaction = await Promisify<Transaction>(
+        this.transactionRepo.get({ where: { TxHash: data.txHash } }),
+      );
 
-      this.logger.info(`Pong transaction sent. Transaction hash: ${tx.hash}`);
+      // throw error if incorrect tx state
+      if (transaction.TxState != TX_STATE_TYPE.PONGING) {
+        this.logger.error(
+          `error in processing send pong transaction, incorrect state: ${
+            transaction.TxState
+          }  [data : ${JSON.stringify(data)}]`,
+        );
+        throw new Error(
+          `Incorrect state: ${transaction.TxState} for sending pong transaction expected state to be: ${TX_STATE_TYPE.PONGING}`,
+        );
+      }
+      try {
+        // Call the pong function on the contract using the txHash from the event data
+        const tx = await this.contract.pong(ethers.id(data.txHash));
 
-      // Optional: You can store the transaction hash in the database or perform additional processing here
+        this.logger.info(`Pong transaction sent. Transaction hash: ${tx.hash}`);
+        const receipt = await tx.wait();
+        this.logger.info(
+          `Pong receipt generated. Transaction hash: ${
+            tx.hash
+          }, Tx receipt: ${JSON.stringify(receipt)}`,
+        );
+        if (receipt.status !== 1) {
+          const { error: UpdateTxError } = await this.transactionRepo.update(
+            { TxID: transaction.TxID },
+            {
+              TxState: TX_STATE_TYPE.PINGED,
+            },
+          );
+          if (UpdateTxError) throw UpdateTxError;
+        }
+      } catch (txError) {
+        this.logger.error(`Transaction failed: ${txError.message}`);
 
+        await this.transactionRepo.update(
+          { TxID: transaction.TxID },
+          {
+            TxState: TX_STATE_TYPE.PINGED,
+          },
+        );
+
+        throw txError;
+      }
       return { error: null };
     } catch (error) {
       this.logger.error(

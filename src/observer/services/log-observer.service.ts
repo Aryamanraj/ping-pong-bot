@@ -5,6 +5,7 @@ import { Logger } from 'winston';
 import { Promisify } from '../../common/helpers/promisifier';
 import { TransactionRepoService } from '../../repo/transaction-repo.service';
 import { BASE_EVENT_DATA } from '../../common/interfaces';
+import { TX_STATE_TYPE } from '../../common/constants';
 
 @Injectable()
 export class LogObserverService {
@@ -17,13 +18,19 @@ export class LogObserverService {
   async handleSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
     try {
       this.logger.info(
-        `Processing send pong from logs queue [data : ${JSON.stringify(
-          data,
-        )}]`,
+        `Processing send pong from logs queue [data : ${JSON.stringify(data)}]`,
       );
 
-      const { error } = await this.rpcService.handleSendPong(data);
+      const { error } = await this.transactionRepo.update(
+        { TxHash: data.txHash },
+        { TxState: TX_STATE_TYPE.PONGING },
+      );
       if (error) throw error;
+      
+      const { error: sendPongError } = await this.rpcService.handleSendPong(
+        data,
+      );
+      if (sendPongError) throw sendPongError;
 
       return { error: null };
     } catch (error) {
