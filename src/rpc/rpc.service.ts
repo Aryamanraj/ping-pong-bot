@@ -19,7 +19,13 @@ import { TransactionRepoService } from '../repo/transaction-repo.service';
 import { Transaction } from '../repo/entities/transaction.entity';
 import { GenericError } from '../common/errors/Generic.error';
 import { ONCHAIN_CONFIG } from '../common/web3';
-import { BASE_EVENT_DATA, ResultWithError } from '../common/interfaces';
+import {
+  BASE_EVENT_DATA,
+  GetNewTransactionsResult,
+  ParsedLog,
+  PingEvent,
+  ResultWithError,
+} from '../common/interfaces';
 import PingPongABI from './abi/PingPong.json';
 import { ethers } from 'ethers';
 
@@ -80,44 +86,52 @@ export class RpcService implements OnApplicationBootstrap {
       `Adding event listeners to ping pong contract on address ${this.contractAddress}`,
     );
 
-    this.contract.on(EventTypes.PING, async (event: any) => {
+    this.contract.on(EventTypes.PING, async (event: PingEvent) => {
       try {
-      // Extract the transactionHash from the event's log
-      const txHash = event?.log?.transactionHash;
+        // Extract the transactionHash from the event's log
+        const txHash = event?.log?.transactionHash;
 
-      if (!txHash) {
-        throw new Error('Transaction hash is missing from the event.');
-      }
+        if (!txHash) {
+          throw new Error('Transaction hash is missing from the event.');
+        }
 
-      this.logger.info(`Received Ping event with txHash: ${txHash}`);
+        this.logger.info(
+          `Received Ping event with txHash: ${txHash}, event: ${JSON.stringify(
+            event,
+          )}`,
+        );
 
-      // const tx = await this.contract.pong(txHash);
-      // this.logger.info(
-      //   `Sent pong for Ping at ${txHash}, transaction: ${tx.hash}`,
-      // );
+        const newTx = new Transaction();
+        newTx.TxHash = txHash;
+        // const tx = await this.contract.pong(txHash);
+        // this.logger.info(
+        //   `Sent pong for Ping at ${txHash}, transaction: ${tx.hash}`,
+        // );
 
-      const eventData: BASE_EVENT_DATA = {
-        txHash,
-        timestamp: Date.now(),
-      };
+        const eventData: BASE_EVENT_DATA = {
+          txHash,
+          timestamp: Date.now(),
+        };
 
-      // const { id: jobId } = await this.logsQueue.add(
-      //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
-      //   {
-      //     data: eventData,
-      //   },
-      //   {
-      //     attempts: 3, // retry 3 times max
-      //     backoff: {
-      //       type: 'exponential', // exponential backoff strategy
-      //       delay: 1000, // initial delay of 1s, increasing exponentially
-      //     },
-      //   },
-      // );
-      this.logger.info(`Added new join challenge job [jobId :]`);
+        // const { id: jobId } = await this.logsQueue.add(
+        //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
+        //   {
+        //     data: eventData,
+        //   },
+        //   {
+        //     attempts: 3, // retry 3 times max
+        //     backoff: {
+        //       type: 'exponential', // exponential backoff strategy
+        //       delay: 1000, // initial delay of 1s, increasing exponentially
+        //     },
+        //   },
+        // );
+        this.logger.info(`Added new join challenge job [jobId :]`);
       } catch (error) {
         this.logger.error(
-          `Error processing Ping event with txHash: ${JSON.stringify(event)} : ${error.stack}`,
+          `Error processing Ping event with txHash: ${JSON.stringify(
+            event,
+          )} : ${error.stack}`,
         );
       }
     });
@@ -126,5 +140,41 @@ export class RpcService implements OnApplicationBootstrap {
         EventTypes,
       )}], contract address : [${JSON.stringify(this.contractAddress)}]]...`,
     );
+  }
+
+  async getNewTransactions(
+    fromBlock: number,
+    limit: number = 1000,
+  ): Promise<ResultWithError> {
+    try {
+      this.logger.info(`Fetching transactions from block ${fromBlock}`);
+      const getLatestBlock = await this.provider.getBlockNumber();
+      const toBlock =
+        getLatestBlock - fromBlock > limit ? fromBlock + limit : getLatestBlock;
+      this.logger.info(
+        `Fetching transactions from block: ${fromBlock} to block: ${toBlock}`,
+      );
+      const logs = await this.provider.getLogs({
+        address: this.contractAddress,
+        fromBlock,
+        toBlock,
+      });
+
+      const parsedLogs: ParsedLog[] = logs.map((log) => ({
+        log,
+        parsedLog: this.contract.interface.parseLog(log),
+      }));
+
+      const result: GetNewTransactionsResult = {
+        parsedLogArray: parsedLogs,
+        toBlockNumber: toBlock - 1,
+      };
+
+      console.log(result);
+      return { data: result, error: null };
+    } catch (error) {
+      this.logger.error(`Error fetching new transactions: ${error.stack}`);
+      return { data: null, error };
+    }
   }
 }
