@@ -23,9 +23,11 @@ import {
   BASE_EVENT_DATA,
   GetNewTransactionsResult,
   NEW_PINGER_EVENT_DATA,
+  NewPingerEvent,
   ParsedLog,
   PingEvent,
   PONG_EVENT_DATA,
+  PongEvent,
   ResultWithError,
 } from '../common/interfaces';
 import PingPongABI from './abi/PingPong.json';
@@ -39,6 +41,7 @@ export class RpcService implements OnApplicationBootstrap {
   private contractAddress: ethers.Addressable;
   private pingPongABI: ethers.Interface;
   private env: string;
+  private wsProvider: ethers.WebSocketProvider;
 
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
@@ -58,8 +61,13 @@ export class RpcService implements OnApplicationBootstrap {
 
   private initializeConfig(defaultConfig) {
     const _nodeUrl = this.configService.get('NODE_URL');
+    const _nodeWssUrl = this.configService.get('NODE__WSS_URL');
     this.provider = new ethers.JsonRpcProvider(
       _nodeUrl ? _nodeUrl : defaultConfig[this.env].NODE_URL,
+    );
+
+    this.wsProvider = new ethers.WebSocketProvider(
+      _nodeWssUrl ? _nodeWssUrl : defaultConfig[this.env].NODE_WSS_URL,
     );
 
     const _pvtKey = this.configService.get('PRIVATE_KEY');
@@ -67,7 +75,6 @@ export class RpcService implements OnApplicationBootstrap {
       _pvtKey ? _pvtKey : defaultConfig[this.env].READ_ONLY_PVT_KEY,
       this.provider,
     );
-
     this.contractAddress = defaultConfig[this.env].CONTRACT_ADDRESS;
     this.pingPongABI = new ethers.Interface(PingPongABI);
   }
@@ -77,7 +84,7 @@ export class RpcService implements OnApplicationBootstrap {
     this.contract = new ethers.Contract(
       this.contractAddress,
       this.pingPongABI,
-      this.wallet,
+      this.wallet.connect(this.wsProvider),
     );
 
     this.logger.info(`Connected to Ethereum RPC!`);
@@ -90,157 +97,156 @@ export class RpcService implements OnApplicationBootstrap {
 
     this.contract.on(EventTypes.PING, async (event: PingEvent) => {
       try {
-        // Extract the transactionHash from the event's log
-        const txHash = event?.log?.transactionHash;
+        // Extract the transaction hash from the event's log
+        const txHash = event?.log?.transactionHash as string;
+        const blockNumber = event?.log?.blockNumber as number;
+        const logIndex = event?.log?.index as number;
 
         if (!txHash) {
           throw new Error('Transaction hash is missing from the event.');
         }
 
         this.logger.info(
-          `Received Ping event with txHash: ${txHash}, event: ${JSON.stringify(
+          `Received Ping event with txHash: ${txHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}, event: ${JSON.stringify(
             event,
           )}`,
         );
 
-        const newTx = new Transaction();
-        newTx.TxHash = txHash;
-        // const tx = await this.contract.pong(txHash);
-        // this.logger.info(
-        //   `Sent pong for Ping at ${txHash}, transaction: ${tx.hash}`,
-        // );
-
+        // Handle the Ping event as needed
         const eventData: BASE_EVENT_DATA = {
           txHash,
           timestamp: Date.now(),
         };
 
-        // const { id: jobId } = await this.logsQueue.add(
-        //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
-        //   {
-        //     data: eventData,
-        //   },
-        //   {
-        //     attempts: 3, // retry 3 times max
-        //     backoff: {
-        //       type: 'exponential', // exponential backoff strategy
-        //       delay: 1000, // initial delay of 1s, increasing exponentially
-        //     },
-        //   },
-        // );
+        const { id: jobId } = await this.logsQueue.add(
+          QUEUE_JOB_NAMES.PONG_TRANSACTION,
+          {
+            data: eventData,
+          },
+          {
+            attempts: 3, // retry 3 times max
+            backoff: {
+              type: 'exponential', // exponential backoff strategy
+              delay: 1000, // initial delay of 1s, increasing exponentially
+            },
+          },
+        );
 
-        this.logger.info(`Added new join challenge job [jobId :]`);
+        this.logger.info(`Added new join challenge job for jobId: ${jobId}`);
       } catch (error) {
         this.logger.error(
-          `Error processing Ping event with txHash: ${JSON.stringify(
-            event,
-          )} : ${error.stack}`,
+          `Error processing Ping event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
         );
       }
     });
 
     // NewPinger event listener
-    this.contract.on(EventTypes.NEW_PINGER, async (event) => {
-      try {
-        const newPingerAddress = event?.pinger as ethers.Addressable;
-        const txHash = event?.log?.transactionHash as string;
-        const blockNumber = event?.log?.blockNumber as number;
-        const logIndex = event?.log?.logIndex as number;
-        if (!newPingerAddress || !txHash) {
-          throw new Error(
-            'Pinger address or transaction hash is missing from the event.',
+    this.contract.on(
+      EventTypes.NEW_PINGER,
+      async (newPingerAddress: ethers.Addressable, event: NewPingerEvent) => {
+        try {
+          // Extract the transaction hash of the NewPinger transaction
+          const txHash = event?.log?.transactionHash;
+          const blockNumber = event?.log?.blockNumber;
+          const logIndex = event?.log?.index;
+
+          // The newPingerAddress is directly provided by the event arguments
+          if (!txHash || !newPingerAddress) {
+            throw new Error(
+              'Transaction hash or newPinger address is missing from the event.',
+            );
+          }
+
+          this.logger.info(
+            `Received NewPinger event with txHash: ${txHash}, newPingerAddress: ${newPingerAddress}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
+          );
+
+          // Handle the NewPinger event as needed, using the newPingerAddress and txHash
+          const eventData: NEW_PINGER_EVENT_DATA = {
+            txHash,
+            pinger: newPingerAddress,
+            timestamp: Date.now(),
+            blockNumber,
+            logIndex,
+          };
+
+          // const { id: jobId } = await this.logsQueue.add(
+          //   QUEUE_JOB_NAMES.NEW_PINGER_TRANSACTION,
+          //   {
+          //     data: eventData,
+          //   },
+          //   {
+          //     attempts: 3, // retry 3 times max
+          //     backoff: {
+          //       type: 'exponential', // exponential backoff strategy
+          //       delay: 1000, // initial delay of 1s, increasing exponentially
+          //     },
+          //   },
+          // );
+
+          this.logger.info(`Processed NewPinger event with txHash: ${txHash}`);
+        } catch (error) {
+          this.logger.error(
+            `Error processing NewPinger event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
           );
         }
-
-        this.logger.info(
-          `Received NewPinger event with pinger: ${newPingerAddress}, txHash: ${txHash}`,
-        );
-
-        // TODO: Implement functionality to handle the change in pinger address
-
-        const eventData: NEW_PINGER_EVENT_DATA = {
-          txHash,
-          pinger: newPingerAddress,
-          timestamp: Date.now(),
-          blockNumber,
-          logIndex,
-        };
-
-        // const { id: jobId } = await this.logsQueue.add(
-        //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
-        //   {
-        //     data: eventData,
-        //   },
-        //   {
-        //     attempts: 3, // retry 3 times max
-        //     backoff: {
-        //       type: 'exponential', // exponential backoff strategy
-        //       delay: 1000, // initial delay of 1s, increasing exponentially
-        //     },
-        //   },
-        // );
-
-        this.logger.info(
-          `Processed NewPinger event with pinger: ${newPingerAddress}`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Error processing NewPinger event: ${JSON.stringify(event)} : ${
-            error.stack
-          }`,
-        );
-      }
-    });
+      },
+    );
 
     // Pong event listener
-    this.contract.on(EventTypes.PONG, async (event) => {
-      try {
-        const txHash = event?.log?.transactionHash;
-        const blockNumber = event?.log?.blockNumber;
-        const logIndex = event?.log?.logIndex;
-        const originalTxHash = event?.args?.txHash; 
-        if (!txHash || !originalTxHash) {
-          throw new Error(
-            'Transaction hash or original txHash is missing from the event.',
+    this.contract.on(
+      EventTypes.PONG,
+      async (pingHash: string, event: PongEvent) => {
+        try {
+          // Extract the transaction hash of the Pong transaction
+          const txHash = event?.log?.transactionHash;
+          const blockNumber = event?.log?.blockNumber;
+          const logIndex = event?.log?.index;
+
+          // Extract the original txHash passed to the Pong function
+          const originalTxHash = pingHash; // This represents the `_txHash` passed to the `pong` function
+
+          if (!txHash || !originalTxHash) {
+            throw new Error(
+              'Transaction hash or original txHash is missing from the event.',
+            );
+          }
+
+          this.logger.info(
+            `Received Pong event with txHash: ${txHash}, originalTxHash: ${originalTxHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
+          );
+
+          // Handle the Pong event as needed, using both txHash and originalTxHash
+          const eventData: PONG_EVENT_DATA = {
+            txHash,
+            originalTxHash,
+            timestamp: Date.now(),
+            blockNumber,
+            logIndex,
+          };
+
+          // const { id: jobId } = await this.logsQueue.add(
+          //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
+          //   {
+          //     data: eventData,
+          //   },
+          //   {
+          //     attempts: 3, // retry 3 times max
+          //     backoff: {
+          //       type: 'exponential', // exponential backoff strategy
+          //       delay: 1000, // initial delay of 1s, increasing exponentially
+          //     },
+          //   },
+          // );
+
+          this.logger.info(`Processed Pong event with txHash: ${txHash}`);
+        } catch (error) {
+          this.logger.error(
+            `Error processing Pong event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
           );
         }
-
-        this.logger.info(
-          `Received Pong event with txHash: ${txHash}, originalTxHash: ${originalTxHash}`,
-        );
-
-        // TODO: Implement functionality to handle the Pong event
-        const eventData: PONG_EVENT_DATA = {
-          txHash,
-          originalTxHash,
-          timestamp: Date.now(),
-          blockNumber,
-          logIndex,
-        };
-
-        // const { id: jobId } = await this.logsQueue.add(
-        //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
-        //   {
-        //     data: eventData,
-        //   },
-        //   {
-        //     attempts: 3, // retry 3 times max
-        //     backoff: {
-        //       type: 'exponential', // exponential backoff strategy
-        //       delay: 1000, // initial delay of 1s, increasing exponentially
-        //     },
-        //   },
-        // );
-
-        this.logger.info(`Processed Pong event with txHash: ${txHash}`);
-      } catch (error) {
-        this.logger.error(
-          `Error processing Pong event with txHash: ${JSON.stringify(
-            event,
-          )} : ${error.stack}`,
-        );
-      }
-    });
+      },
+    );
 
     this.logger.info(
       `Listening to [events : [${Object.values(
@@ -289,6 +295,28 @@ export class RpcService implements OnApplicationBootstrap {
     } catch (error) {
       this.logger.error(`Error fetching new transactions: ${error.stack}`);
       return { data: null, error };
+    }
+  }
+
+  async handleSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
+    try {
+      this.logger.info(`Processing send pong [data : ${JSON.stringify(data)}]`);
+
+      // Call the pong function on the contract using the txHash from the event data
+      const tx = await this.contract.pong(ethers.id(data.txHash));
+
+      this.logger.info(`Pong transaction sent. Transaction hash: ${tx.hash}`);
+
+      // Optional: You can store the transaction hash in the database or perform additional processing here
+
+      return { error: null };
+    } catch (error) {
+      this.logger.error(
+        `Error processing pong transaction [data : ${JSON.stringify(data)}] : ${
+          error.stack
+        }`,
+      );
+      return { error };
     }
   }
 }
