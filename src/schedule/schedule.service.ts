@@ -21,7 +21,7 @@ import { TransactionRepoService } from '../repo/transaction-repo.service';
 
 @Injectable()
 export class ScheduleService {
-  private isSendPongProcessing: boolean;
+  private isLateSendPongProcessing: boolean;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
     @InjectQueue(QueueNames.NEW_LOGS) private newLogsQueue: Queue,
@@ -29,41 +29,41 @@ export class ScheduleService {
     private transactionRepo: TransactionRepoService,
   ) {}
 
-  async startPongSettlementChecker(
+  async startLatePongSettlementChecker(
     cronTime: CronExpression = CronExpression.EVERY_10_MINUTES,
   ): Promise<ResultWithError> {
     try {
       this.logger.info(
-        `Starting pong settlement checker : ${JSON.stringify(cronTime)}`,
+        `Starting late pong settlement checker : ${JSON.stringify(cronTime)}`,
       );
 
       let job: CronJob<null, null> = undefined;
       try {
-        job = this.schedulerRegistry.getCronJob(CRON_JOB_NAMES.SEND_PONG);
+        job = this.schedulerRegistry.getCronJob(CRON_JOB_NAMES.LATE_SEND_PONG);
       } catch (error) {
         this.logger.info(
-          `No cron job present [jobName : ${CRON_JOB_NAMES.SEND_PONG}]`,
+          `No cron job present [jobName : ${CRON_JOB_NAMES.LATE_SEND_PONG}]`,
         );
       }
       if (job) {
         this.logger.info(`Found old job, removing it`);
         job.stop();
-        this.schedulerRegistry.deleteCronJob(CRON_JOB_NAMES.SEND_PONG);
+        this.schedulerRegistry.deleteCronJob(CRON_JOB_NAMES.LATE_SEND_PONG);
       }
 
       job = new CronJob(cronTime, async () => {
-        await this.handleSendPongSettlement();
+        await this.handleLateSendPongSettlement();
       });
-      this.schedulerRegistry.addCronJob(CRON_JOB_NAMES.SEND_PONG, job);
+      this.schedulerRegistry.addCronJob(CRON_JOB_NAMES.LATE_SEND_PONG, job);
 
       job.start();
       this.logger.info(
-        `added and started send pong settlement checker cron job`,
+        `added and started late send pong settlement checker cron job`,
       );
       return { data: { success: true }, error: null };
     } catch (error) {
       this.logger.error(
-        `Error in starting send pong settlement checker : ${error.stack}`,
+        `Error in starting late send pong settlement checker : ${error.stack}`,
       );
       return { data: null, error };
     }
@@ -71,21 +71,21 @@ export class ScheduleService {
 
   async stopPongSettlementChecker() {
     try {
-      this.logger.info(`Stopping pong settlement checker`);
+      this.logger.info(`Stopping late send pong settlement checker`);
 
-      const job = this.schedulerRegistry.getCronJob(CRON_JOB_NAMES.SEND_PONG);
+      const job = this.schedulerRegistry.getCronJob(CRON_JOB_NAMES.LATE_SEND_PONG);
 
       if (!job) {
-        this.logger.info(`pong settlement checker job does not exist`);
+        this.logger.info(`late send pong settlement checker job does not exist`);
         return { data: { success: true }, error: null };
       }
 
       job.stop();
-      this.logger.info(`stopped pong settlement cron job`);
+      this.logger.info(`stopped late send pong settlement cron job`);
       return { data: { success: true }, error: null };
     } catch (error) {
       this.logger.error(
-        `Error in stopping pong settlement checker : ${error.stack}`,
+        `Error in stopping late send pong settlement checker : ${error.stack}`,
       );
       return { data: null, error };
     }
@@ -165,18 +165,18 @@ export class ScheduleService {
     }
   }
 
-  private async handleSendPongSettlement() {
+  private async handleLateSendPongSettlement() {
     try {
-      if (this.isSendPongProcessing) {
+      if (this.isLateSendPongProcessing) {
         this.logger.info(
-          `Already processing send pong settlement update... sleeping till next time interval`,
+          `Already processing late send pong settlement update... sleeping till next time interval`,
         );
         return;
       }
 
-      this.isSendPongProcessing = true;
+      this.isLateSendPongProcessing = true;
       this.logger.info(
-        `Processing send pong settlement for eligible challeneges`,
+        `Processing late send pong settlement for eligible challeneges`,
       );
 
       const options: FindManyOptions<Transaction> = {
@@ -194,7 +194,7 @@ export class ScheduleService {
       );
 
       this.logger.info(
-        `Processing ${transactions.length} pongs for settlement`,
+        `Processing ${transactions.length} late send pongs for settlement`,
       );
 
       for (const transaction of transactions) {
@@ -207,17 +207,17 @@ export class ScheduleService {
           { data: eventData },
         );
         this.logger.info(
-          `Added processing settlement job [queue : ${QueueNames.NEW_LOGS}, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${job.id}, with data: ${eventData}]`,
+          `Added processing late send pong settlement job [queue : ${QueueNames.NEW_LOGS}, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${job.id}, with data: ${eventData}]`,
         );
       }
 
       this.logger.info(
-        `Done updating ${transactions.length} send pong for settlement`,
+        `Done updating ${transactions.length} late send pong for settlement`,
       );
     } catch (error) {
-      this.logger.error(`Error in processing send pong cron : ${error.stack}`);
+      this.logger.error(`Error in processing late send pong cron : ${error.stack}`);
     }
-    this.isSendPongProcessing = false;
+    this.isLateSendPongProcessing = false;
   }
 
   private async handleCronsHealthCheck() {
