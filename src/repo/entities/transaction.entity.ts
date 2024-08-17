@@ -3,12 +3,15 @@ import {
   PrimaryGeneratedColumn,
   Column,
   BaseEntity,
-  ManyToOne,
-  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { TX_EVENT_TYPE, TX_EVENT_TYPE_ENUM } from '../../common/constants';
+import {
+  TX_EVENT_TYPE,
+  TX_EVENT_TYPE_ENUM,
+  TX_STATE_TYPE,
+  TX_STATE_TYPE_ENUM,
+} from '../../common/constants';
 import { ApiProperty } from '@nestjs/swagger';
 
 @Entity({ name: 'Transactions' })
@@ -21,6 +24,18 @@ export class Transaction extends BaseEntity {
   @Column({ length: 255, nullable: true })
   TxHash: string;
 
+  @ApiProperty()
+  @Column({ length: 255, nullable: true })
+  Network: string;
+
+  @ApiProperty()
+  @Column({ nullable: true })
+  BlockNumber: number;
+
+  @ApiProperty()
+  @Column({ nullable: true })
+  LogIndex: number;
+
   @ApiProperty({
     enum: TX_EVENT_TYPE_ENUM,
   })
@@ -29,11 +44,37 @@ export class Transaction extends BaseEntity {
     enum: TX_EVENT_TYPE,
     default: TX_EVENT_TYPE.PING,
   })
-  RefundState: TX_EVENT_TYPE;
+  TxType: TX_EVENT_TYPE;
+
+  @ApiProperty({
+    enum: TX_STATE_TYPE_ENUM,
+  })
+  @Column({
+    type: 'enum',
+    enum: TX_STATE_TYPE,
+    default: TX_STATE_TYPE.PINGED,
+  })
+  TxState: TX_STATE_TYPE;
 
   @ApiProperty()
   @Column({ type: 'bigint' })
   Timestamp: number;
+
+  @ApiProperty()
+  @Column({ length: 255, nullable: true })
+  PongTxHash: string;
+
+  @ApiProperty()
+  @Column({ nullable: true })
+  PongBlockNumber: number;
+
+  @ApiProperty()
+  @Column({ nullable: true })
+  PongLogIndex: number;
+
+  @ApiProperty()
+  @Column({ type: 'bigint', nullable: true })
+  PongTimestamp: number;
 
   @ApiProperty()
   @CreateDateColumn({
@@ -49,5 +90,4 @@ export class Transaction extends BaseEntity {
     onUpdate: 'CURRENT_TIMESTAMP',
   })
   updatedAt: Date;
-
 }

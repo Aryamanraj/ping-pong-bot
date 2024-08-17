@@ -26,7 +26,7 @@ export class LogObserverService {
         { TxState: TX_STATE_TYPE.PONGING },
       );
       if (error) throw error;
-      
+
       const { error: sendPongError } = await this.rpcService.handleSendPong(
         data,
       );

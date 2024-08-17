@@ -60,6 +60,7 @@ export class IndexedStateRepoService {
       const newIndexedState = new IndexedState();
       newIndexedState.Network = idxState.Network;
       newIndexedState.BlockNumber = idxState.BlockNumber;
+      newIndexedState.ContractAddress = idxState.ContractAddress;
 
       const createdIndexedState = await this.indexedStateRepo.save(
         newIndexedState,

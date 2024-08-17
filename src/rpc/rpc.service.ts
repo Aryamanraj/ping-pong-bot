@@ -37,13 +37,15 @@ import {
 } from '../common/interfaces';
 import PingPongABI from './abi/PingPong.json';
 import { ethers } from 'ethers';
+import { IndexedState } from '../repo/entities/indexed-state.entity';
+import { IndexedStateRepoService } from '../repo/indexed-state-repo.service';
 
 @Injectable()
 export class RpcService implements OnApplicationBootstrap {
   private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
   private contract: ethers.Contract;
-  private contractAddress: ethers.Addressable;
+  private contractAddress: string;
   private pingPongABI: ethers.Interface;
   private env: string;
   private wsProvider: ethers.WebSocketProvider;
@@ -54,18 +56,19 @@ export class RpcService implements OnApplicationBootstrap {
     @InjectQueue(QueueNames.NEW_LOGS) private logsQueue: Queue,
     private configService: ConfigService,
     private transactionRepo: TransactionRepoService,
+    private indexStateRepo: IndexedStateRepoService,
   ) {}
 
   async onApplicationBootstrap() {
     const defaultConfig = ONCHAIN_CONFIG;
     this.env = (this.configService.get('NODE_ENV') ||
       'development') as keyof typeof defaultConfig;
-    this.initializeConfig(defaultConfig);
+    await this.initializeConfig(defaultConfig);
     await this.initConnection();
     if (this.env !== 'test') this.subscribeToEvents();
   }
 
-  private initializeConfig(defaultConfig) {
+  private async initializeConfig(defaultConfig) {
     const _nodeUrl = this.configService.get('NODE_URL');
     const _nodeWssUrl = this.configService.get('NODE__WSS_URL');
     this.provider = new ethers.JsonRpcProvider(
@@ -81,10 +84,12 @@ export class RpcService implements OnApplicationBootstrap {
       _pvtKey ? _pvtKey : defaultConfig[this.env].READ_ONLY_PVT_KEY,
       this.provider,
     );
-    this.contractAddress = defaultConfig[this.env].CONTRACT_ADDRESS;
-    this.pingPongABI = new ethers.Interface(PingPongABI);
-
     this.chain = defaultConfig[this.env].CHAIN;
+    const idxState = await Promisify<IndexedState>(
+      this.indexStateRepo.get({ where: { Network: this.chain } }),
+    );
+    this.contractAddress = idxState.ContractAddress;
+    this.pingPongABI = new ethers.Interface(PingPongABI);
   }
 
   private async initConnection() {
@@ -114,29 +119,18 @@ export class RpcService implements OnApplicationBootstrap {
           throw new Error('Transaction hash is missing from the event.');
         }
 
-        const newTx = new Transaction();
-
-        newTx.TxHash = txHash;
-        newTx.BlockNumber = blockNumber;
-        newTx.LogIndex = logIndex;
-        newTx.TxType = TX_EVENT_TYPE.PING;
-        newTx.TxState = TX_STATE_TYPE.PINGED;
-        newTx.Network = this.chain;
-
-        // Fetch the block details to get the timestamp
-        const block = blockNumber
-          ? await this.provider.getBlock(blockNumber)
-          : null;
-        const timestamp = block?.timestamp ?? null;
-        newTx.Timestamp = timestamp;
-
         this.logger.info(
           `Received Ping event with txHash: ${txHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}, event: ${JSON.stringify(
             event,
           )}`,
         );
 
-        await newTx.save();
+        const { error } = await this.handlePingEventUpdate({
+          txHash,
+          blockNumber,
+          logIndex,
+        });
+        if (error) throw error;
 
         // Handle the Ping event as needed
         const eventData: BASE_EVENT_DATA = {
@@ -190,25 +184,13 @@ export class RpcService implements OnApplicationBootstrap {
           // Handle the NewPinger event as needed, using the newPingerAddress and txHash
           const eventData: NEW_PINGER_EVENT_DATA = {
             txHash,
-            pinger: newPingerAddress,
+            newPinger: newPingerAddress,
             timestamp: Date.now(),
             blockNumber,
             logIndex,
           };
-
-          // const { id: jobId } = await this.logsQueue.add(
-          //   QUEUE_JOB_NAMES.NEW_PINGER_TRANSACTION,
-          //   {
-          //     data: eventData,
-          //   },
-          //   {
-          //     attempts: 3, // retry 3 times max
-          //     backoff: {
-          //       type: 'exponential', // exponential backoff strategy
-          //       delay: 1000, // initial delay of 1s, increasing exponentially
-          //     },
-          //   },
-          // );
+          const { error } = await this.handleNewPingerEventUpdate(eventData);
+          if (error) throw error;
 
           this.logger.info(`Processed NewPinger event with txHash: ${txHash}`);
         } catch (error) {
@@ -387,9 +369,7 @@ export class RpcService implements OnApplicationBootstrap {
     }
   }
 
-  private async handlePongEventUpdate(
-    eventData: PONG_EVENT_DATA,
-  ): Promise<{ error }> {
+  async handlePongEventUpdate(eventData: PONG_EVENT_DATA): Promise<{ error }> {
     const { originalTxHash, txHash, blockNumber, timestamp, logIndex } =
       eventData;
     try {
@@ -415,6 +395,97 @@ export class RpcService implements OnApplicationBootstrap {
     } catch (error) {
       this.logger.error(
         `Error updating transaction for Pong event with txHash: ${txHash} : ${error.stack}`,
+      );
+      return { error };
+    }
+  }
+
+  async handlePingEventUpdate({
+    txHash,
+    blockNumber,
+    logIndex,
+  }: {
+    txHash: string;
+    blockNumber: number | null;
+    logIndex: number | null;
+  }): Promise<{ error }> {
+    try {
+      const newTx = new Transaction();
+
+      newTx.TxHash = txHash;
+      newTx.BlockNumber = blockNumber;
+      newTx.LogIndex = logIndex;
+      newTx.TxType = TX_EVENT_TYPE.PING;
+      newTx.TxState = TX_STATE_TYPE.PINGED;
+      newTx.Network = this.chain;
+
+      // Fetch the block details to get the timestamp
+      const block = blockNumber
+        ? await this.provider.getBlock(blockNumber)
+        : null;
+      const timestamp = block?.timestamp ?? null;
+      newTx.Timestamp = timestamp;
+
+      await newTx.save();
+
+      this.logger.info(`Saved Ping transaction with txHash: ${txHash}`);
+      return { error: null };
+    } catch (error) {
+      this.logger.error(
+        `Error saving Ping transaction with txHash: ${txHash} : ${error.stack}`,
+      );
+      return { error };
+    }
+  }
+
+  async handleNewPingerEventUpdate(
+    eventData: NEW_PINGER_EVENT_DATA,
+  ): Promise<{ error }> {
+    const { txHash, newPinger, blockNumber, logIndex, timestamp } = eventData;
+    try {
+      // Update the transaction table
+      const newTx = new Transaction();
+      newTx.TxHash = txHash;
+      newTx.BlockNumber = blockNumber;
+      newTx.LogIndex = logIndex;
+      newTx.TxType = TX_EVENT_TYPE.NEW_PINGER;
+      newTx.TxState = TX_STATE_TYPE.NEW_PINGER_UPDATE_PROCESSING;
+      newTx.Network = this.chain;
+      newTx.Timestamp = timestamp;
+      await newTx.save();
+
+      this.logger.info(
+        `Saved NewPinger transaction with txHash: ${txHash}, updating IndexedState`,
+      );
+
+      // Update the IndexedState table with the new contract address
+      const indexedState = await Promisify<IndexedState>(
+        this.indexStateRepo.get({
+          where: { Network: this.chain },
+        }),
+      );
+      indexedState.ContractAddress = await newPinger.getAddress();
+      indexedState.BlockNumber = blockNumber;
+      await indexedState.save();
+
+      // Update the contract address in the RpcService instance
+      this.contractAddress = await newPinger.getAddress();
+
+      // Update the transaction state to indicate processing is complete
+      await this.transactionRepo.update(
+        { TxHash: txHash },
+        {
+          TxState: TX_STATE_TYPE.NEW_PINGER_UPDATE_PROCESSED,
+        },
+      );
+
+      this.logger.info(
+        `Updated IndexedState and contract address for NewPinger event with txHash: ${txHash}`,
+      );
+      return { error: null };
+    } catch (error) {
+      this.logger.error(
+        `Error updating transaction and IndexedState for NewPinger event with txHash: ${txHash} : ${error.stack}`,
       );
       return { error };
     }

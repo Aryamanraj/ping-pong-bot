@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BaseEntity, Column, CreateDateColumn, Entity, UpdateDateColumn } from 'typeorm';
+import { ethers } from 'ethers';
+import {
+  BaseEntity,
+  Column,
+  CreateDateColumn,
+  Entity,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity({ name: 'IndexedState' })
 export class IndexedState extends BaseEntity {
@@ -10,6 +17,10 @@ export class IndexedState extends BaseEntity {
   @ApiProperty()
   @Column({ nullable: true })
   BlockNumber: number;
+
+  @ApiProperty()
+  @Column({ length: 255, nullable: true })
+  ContractAddress: string;
 
   @ApiProperty()
   @CreateDateColumn({

@@ -5,15 +5,9 @@ import { TransactionRepoService } from './transaction-repo.service';
 import { IndexedStateRepoService } from './indexed-state-repo.service';
 import { IndexedState } from './entities/indexed-state.entity';
 
-export const entities = [
-  Transaction,
-  IndexedState,
-];
+export const entities = [Transaction, IndexedState];
 
-export const repoServices = [
-  TransactionRepoService,
-  IndexedStateRepoService,
-];
+export const repoServices = [TransactionRepoService, IndexedStateRepoService];
 
 @Module({
   imports: [TypeOrmModule.forFeature(entities)],

@@ -7,7 +7,7 @@ import { QueueModule } from '../queue/queue.module';
 import { WinstonModule } from 'nest-winston';
 import * as path from 'path';
 import * as winston from 'winston';
-// import { ObserverModule } from '../observer/observer.module';
+import { ObserverModule } from '../observer/observer.module';
 import { RpcModule } from '../rpc/rpc.module';
 import { BlockModule } from '../block/block.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -54,7 +54,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     RpcModule,
     // HealthCheckModule,
     ScheduleModule.forRoot(),
-    // ObserverModule,
+    ObserverModule,
     BlockModule,
   ],
   controllers: [],
