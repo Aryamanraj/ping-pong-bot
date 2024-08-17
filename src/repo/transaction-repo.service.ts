@@ -52,20 +52,25 @@ export class TransactionRepoService {
     }
   }
 
-  async get(options: FindOneOptions<Transaction>): Promise<ResultWithError> {
+  async get(
+    options: FindOneOptions<Transaction>,
+    panic = true,
+  ): Promise<ResultWithError> {
     try {
       this.logger.info(
         `Finding transaction record [condition : ${JSON.stringify(options)}]`,
       );
       const result = await this.transactionRepo.findOne(options);
+      if (!result && panic)
+        throw new GenericError('Transaction not found', HttpStatus.NOT_FOUND);
       return { data: result, error: null };
     } catch (error) {
       this.logger.error(
         `Error in fetching transaction record [condition : ${JSON.stringify(
           options,
-        )}] : ${error.stack}`,
+        )}: ${error.stack}]`,
       );
-      return { data: null, error };
+      return { data: null, error: error };
     }
   }
 

@@ -35,6 +35,28 @@ export class LogConsumer {
     }
   }
 
+  @Process(QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION)
+  async handleLateSendPongTransaction(job: Job) {
+    try {
+      this.logger.info(`Processing late send pong [jobId : ${job.id}]`);
+      job.progress(0);
+
+      const { error } = await this.logObserverService.handleLateSendPong(
+        job.data.data,
+      );
+
+      if (error) {
+        this.logger.error(`Moving the job to failed queue [jobId : ${job.id}]`);
+        await job.moveToFailed(error);
+      }
+      job.progress(100);
+    } catch (error) {
+      this.logger.error(
+        `Error in processing late send pong job [jobId : ${job.id}] : ${error.stack}`,
+      );
+    }
+  }
+
   @OnQueueFailed()
   async handleFailedJobs(job: Job, err: Error) {
     this.logger.error(

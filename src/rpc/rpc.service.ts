@@ -31,6 +31,7 @@ import {
   NewPingerEvent,
   ParsedLog,
   PingEvent,
+  PingEventData,
   PONG_EVENT_DATA,
   PongEvent,
   ResultWithError,
@@ -111,30 +112,28 @@ export class RpcService implements OnApplicationBootstrap {
     this.contract.on(EventTypes.PING, async (event: PingEvent) => {
       try {
         // Extract the transaction hash from the event's log
-        const txHash = event?.log?.transactionHash as string;
-        const blockNumber = (event?.log?.blockNumber as number) ?? null;
-        const logIndex = (event?.log?.index as number) ?? null;
 
-        if (!txHash) {
+        const pingEventData: PingEventData = {
+          txHash: event?.log?.transactionHash as string,
+          blockNumber: (event?.log?.blockNumber as number) ?? null,
+          logIndex: (event?.log?.index as number) ?? null,
+        }
+        if (!pingEventData.txHash) {
           throw new Error('Transaction hash is missing from the event.');
         }
 
         this.logger.info(
-          `Received Ping event with txHash: ${txHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}, event: ${JSON.stringify(
+          `Received Ping event with txHash: ${pingEventData.txHash}, blockNumber: ${pingEventData.blockNumber}, logIndex: ${pingEventData.logIndex}, event: ${JSON.stringify(
             event,
           )}`,
         );
 
-        const { error } = await this.handlePingEventUpdate({
-          txHash,
-          blockNumber,
-          logIndex,
-        });
+        const { error } = await this.handlePingEventUpdate(pingEventData);
         if (error) throw error;
 
         // Handle the Ping event as needed
         const eventData: BASE_EVENT_DATA = {
-          txHash,
+          txHash: pingEventData.txHash,
           timestamp: Date.now(),
         };
 
