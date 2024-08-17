@@ -99,3 +99,9 @@ export interface GetNewTransactionsResult {
   parsedLogArray: ParsedLog[];
   toBlockNumber: number;
 }
+
+export interface PingEventData {
+  txHash: string;
+  blockNumber: number;
+  logIndex: number;
+}

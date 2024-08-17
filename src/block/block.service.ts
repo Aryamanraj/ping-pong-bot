@@ -14,8 +14,9 @@ import { Transaction } from '../repo/entities/transaction.entity';
 import { Promisify } from '../common/helpers/promisifier';
 import {
   GetNewTransactionsResult,
-  ParsedLog,
+  NEW_PINGER_EVENT_DATA,
   PingEventData,
+  PONG_EVENT_DATA,
 } from '../common/interfaces';
 
 @Injectable()
@@ -46,7 +47,7 @@ export class BlockService implements OnApplicationBootstrap {
     this.chain = defaultConfig[this.env].CHAIN;
   }
 
-  @Cron(CronExpression.EVERY_10_HOURS)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async indexBlocks() {
     try {
       if (this.isBlockIndexing) {
@@ -103,7 +104,6 @@ export class BlockService implements OnApplicationBootstrap {
         );
         switch (parsedLog.name) {
           case EventTypes.PING:
-            console.log(parsedLog);
             const pingEventData: PingEventData = {
               txHash: log.transactionHash,
               blockNumber: log.blockNumber,
@@ -123,14 +123,63 @@ export class BlockService implements OnApplicationBootstrap {
               )} and parsedLog: ${JSON.stringify(parsedLog)}`,
             );
 
-            const { error } = await this.rpcService.handlePingEventUpdate(pingEventData);
-            if (error) throw error;
+            const { error: pingError } =
+              await this.rpcService.handlePingEventUpdate(pingEventData);
+            if (pingError) throw pingError;
             break;
           case EventTypes.PONG:
-            //   await this.rpcService.handlePongEvent(parsedLog);
+            const pongEventData: PONG_EVENT_DATA = {
+              txHash: log.transactionHash,
+              originalTxHash: parsedLog.args[0],
+              timestamp: Date.now(),
+              blockNumber: log.blockNumber,
+              logIndex: log.index,
+            };
+            if (!pongEventData.txHash) {
+              throw new Error('Transaction hash is missing from the event.');
+            }
+
+            this.logger.info(
+              `Received Pong event with txHash: ${
+                pongEventData.txHash
+              }, blockNumber: ${pongEventData.blockNumber}, logIndex: ${
+                pongEventData.logIndex
+              }, originalTxHash: ${
+                pongEventData.originalTxHash
+              }, event log: ${JSON.stringify(
+                log,
+              )} and parsedLog: ${JSON.stringify(parsedLog)}`,
+            );
+            const { error: pongError } =
+              await this.rpcService.handlePongEventUpdate(pongEventData);
+            if (pongError) throw pongError;
             break;
           case EventTypes.NEW_PINGER:
-            //   await this.rpcService.handleNewPingerEvent(parsedLog);
+            const newPingerEventData: NEW_PINGER_EVENT_DATA = {
+                txHash: log.transactionHash,
+                newPinger: parsedLog.args[0],
+                timestamp: Date.now(),
+                blockNumber: log.blockNumber,
+                logIndex: log.index,
+              };
+              if (!pongEventData.txHash) {
+                throw new Error('Transaction hash is missing from the event.');
+              }
+  
+              this.logger.info(
+                `Received new pinger event with txHash: ${
+                    newPingerEventData.txHash
+                }, blockNumber: ${newPingerEventData.blockNumber}, logIndex: ${
+                    newPingerEventData.logIndex
+                }, originalTxHash: ${
+                    newPingerEventData.newPinger
+                }, event log: ${JSON.stringify(
+                  log,
+                )} and parsedLog: ${JSON.stringify(parsedLog)}`,
+              );
+              const { error: newPingerError } =
+                await this.rpcService.handleNewPingerEventUpdate(newPingerEventData);
+              if (newPingerError) throw newPingerError;  
             break;
           default:
             this.logger.warn(`Unhandled event: ${parsedLog.name}`);

@@ -44,4 +44,4 @@ export const TX_STATE_TYPE_ENUM = [
   'NEW_PINGER_UPDATE_PROCESSED',
 ];
 
-export const CUTOFF_TIME = 1 * 60 // 10 mintues
+export const CUTOFF_TIME = 10 * 60 // 10 mintues
