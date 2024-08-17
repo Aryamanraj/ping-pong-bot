@@ -10,4 +10,8 @@ export class IndexedStateDto {
   @ApiProperty()
   @IsOptional()
   blockNumber?: number;
+
+  @ApiProperty()
+  @IsOptional()
+  contractAddress?: string;
 }

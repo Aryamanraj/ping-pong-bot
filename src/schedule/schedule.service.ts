@@ -74,10 +74,14 @@ export class ScheduleService {
     try {
       this.logger.info(`Stopping late send pong settlement checker`);
 
-      const job = this.schedulerRegistry.getCronJob(CRON_JOB_NAMES.LATE_SEND_PONG);
+      const job = this.schedulerRegistry.getCronJob(
+        CRON_JOB_NAMES.LATE_SEND_PONG,
+      );
 
       if (!job) {
-        this.logger.info(`late send pong settlement checker job does not exist`);
+        this.logger.info(
+          `late send pong settlement checker job does not exist`,
+        );
         return { data: { success: true }, error: null };
       }
 
@@ -208,7 +212,11 @@ export class ScheduleService {
           { data: eventData },
         );
         this.logger.info(
-          `Added processing late send pong settlement job [queue : ${QueueNames.LATE_LOGS}, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${job.id}, with data: ${JSON.stringify(eventData)}]`,
+          `Added processing late send pong settlement job [queue : ${
+            QueueNames.LATE_LOGS
+          }, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${
+            job.id
+          }, with data: ${JSON.stringify(eventData)}]`,
         );
       }
 
@@ -216,7 +224,9 @@ export class ScheduleService {
         `Done updating ${transactions.length} late send pong for settlement`,
       );
     } catch (error) {
-      this.logger.error(`Error in processing late send pong cron : ${error.stack}`);
+      this.logger.error(
+        `Error in processing late send pong cron : ${error.stack}`,
+      );
     }
     this.isLateSendPongProcessing = false;
   }

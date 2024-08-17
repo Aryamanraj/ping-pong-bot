@@ -22,9 +22,11 @@ export class LogObserverService {
         `Processing send pong from logs queue [data : ${JSON.stringify(data)}]`,
       );
 
-      const transaction = await Promisify<Transaction>(this.transactionRepo.get({where: {TxHash: data.txHash}}))
-      if(transaction.TxState === TX_STATE_TYPE.PONG_CONFIRMED){
-        throw new Error('pong already confirmed')
+      const transaction = await Promisify<Transaction>(
+        this.transactionRepo.get({ where: { TxHash: data.txHash } }),
+      );
+      if (transaction.TxState === TX_STATE_TYPE.PONG_CONFIRMED) {
+        throw new Error('pong already confirmed');
       }
 
       const { error } = await this.transactionRepo.update(

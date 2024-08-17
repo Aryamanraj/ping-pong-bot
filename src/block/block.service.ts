@@ -156,30 +156,32 @@ export class BlockService implements OnApplicationBootstrap {
             break;
           case EventTypes.NEW_PINGER:
             const newPingerEventData: NEW_PINGER_EVENT_DATA = {
-                txHash: log.transactionHash,
-                newPinger: parsedLog.args[0],
-                timestamp: Date.now(),
-                blockNumber: log.blockNumber,
-                logIndex: log.index,
-              };
-              if (!pongEventData.txHash) {
-                throw new Error('Transaction hash is missing from the event.');
-              }
-  
-              this.logger.info(
-                `Received new pinger event with txHash: ${
-                    newPingerEventData.txHash
-                }, blockNumber: ${newPingerEventData.blockNumber}, logIndex: ${
-                    newPingerEventData.logIndex
-                }, originalTxHash: ${
-                    newPingerEventData.newPinger
-                }, event log: ${JSON.stringify(
-                  log,
-                )} and parsedLog: ${JSON.stringify(parsedLog)}`,
+              txHash: log.transactionHash,
+              newPinger: parsedLog.args[0],
+              timestamp: Date.now(),
+              blockNumber: log.blockNumber,
+              logIndex: log.index,
+            };
+            if (!pongEventData.txHash) {
+              throw new Error('Transaction hash is missing from the event.');
+            }
+
+            this.logger.info(
+              `Received new pinger event with txHash: ${
+                newPingerEventData.txHash
+              }, blockNumber: ${newPingerEventData.blockNumber}, logIndex: ${
+                newPingerEventData.logIndex
+              }, originalTxHash: ${
+                newPingerEventData.newPinger
+              }, event log: ${JSON.stringify(
+                log,
+              )} and parsedLog: ${JSON.stringify(parsedLog)}`,
+            );
+            const { error: newPingerError } =
+              await this.rpcService.handleNewPingerEventUpdate(
+                newPingerEventData,
               );
-              const { error: newPingerError } =
-                await this.rpcService.handleNewPingerEventUpdate(newPingerEventData);
-              if (newPingerError) throw newPingerError;  
+            if (newPingerError) throw newPingerError;
             break;
           default:
             this.logger.warn(`Unhandled event: ${parsedLog.name}`);

@@ -1,6 +1,6 @@
 export const QueueNames = {
   NEW_LOGS: 'new-logs', // handle web3 interaction logs updates
-  LATE_LOGS: 'late-logs' //handle late log web3 interactions
+  LATE_LOGS: 'late-logs', //handle late log web3 interactions
 };
 
 // list of queues
@@ -13,7 +13,7 @@ export const QUEUE_JOB_NAMES = {
 
 export const CRON_JOB_NAMES = {
   CRONS_HEALTH_CHECKER: 'crons-health-checker',
-  LATE_SEND_PONG: 'late-send-pong-cron'
+  LATE_SEND_PONG: 'late-send-pong-cron',
 };
 
 export enum TX_EVENT_TYPE {
@@ -44,4 +44,4 @@ export const TX_STATE_TYPE_ENUM = [
   'NEW_PINGER_UPDATE_PROCESSED',
 ];
 
-export const CUTOFF_TIME = 10 * 60 // 10 mintues
+export const CUTOFF_TIME = 10 * 60; // 10 mintues

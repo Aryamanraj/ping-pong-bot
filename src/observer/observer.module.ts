@@ -17,7 +17,12 @@ import { LateLogObserverService } from './services/late-log-observer.service';
     RepoModule,
     RpcModule,
   ],
-  providers: [LogConsumer, LogObserverService, LateLogConsumer, LateLogObserverService],
+  providers: [
+    LogConsumer,
+    LogObserverService,
+    LateLogConsumer,
+    LateLogObserverService,
+  ],
   controllers: [],
 })
 export class ObserverModule {}

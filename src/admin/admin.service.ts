@@ -8,7 +8,7 @@ import { IndexedState } from '../repo/entities/indexed-state.entity';
 import { Promisify } from '../common/helpers/promisifier';
 import { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
-import { QueueNames, QUEUE_JOB_NAMES } from '../common/constants';
+import { QueueNames } from '../common/constants';
 
 @Injectable()
 export class AdminService {
@@ -42,6 +42,7 @@ export class AdminService {
 
         lastIndexedState.Network = indexedState.network;
         lastIndexedState.BlockNumber = indexedState.blockNumber;
+        lastIndexedState.ContractAddress = indexedState.contractAddress;
 
         const { error } = await this.idxStateRepo.create(lastIndexedState);
         _error = error;
@@ -50,6 +51,9 @@ export class AdminService {
         lastIndexedState.BlockNumber = indexedState.blockNumber
           ? indexedState.blockNumber
           : lastIndexedState.BlockNumber;
+        lastIndexedState.ContractAddress = indexedState.contractAddress
+          ? indexedState.contractAddress
+          : lastIndexedState.ContractAddress;
         const { error } = await this.idxStateRepo.update(
           { Network: indexedState.network },
           lastIndexedState,

@@ -28,7 +28,7 @@ import { CronExpression } from '@nestjs/schedule';
 export class AdminController {
   constructor(
     private adminService: AdminService,
-    private schedulerService: ScheduleService
+    private schedulerService: ScheduleService,
   ) {}
 
   @Post('/indexed-state')
@@ -73,10 +73,9 @@ export class AdminController {
     let resData = null;
     let resSuccess = true;
     try {
-      const result =
-        await this.schedulerService.startLatePongSettlementChecker(
-          data.timePeriod as CronExpression,
-        );
+      const result = await this.schedulerService.startLatePongSettlementChecker(
+        data.timePeriod as CronExpression,
+      );
       if (result.error) throw result.error;
 
       resData = result.data;
@@ -101,8 +100,7 @@ export class AdminController {
     let resData = null;
     let resSuccess = true;
     try {
-      const result =
-        await this.schedulerService.stopPongSettlementChecker();
+      const result = await this.schedulerService.stopPongSettlementChecker();
       if (result.error) throw result.error;
 
       resData = result.data;

@@ -19,12 +19,16 @@ export class LateLogObserverService {
   async handleLateSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
     try {
       this.logger.info(
-        `Processing late send pong from logs queue [data : ${JSON.stringify(data)}]`,
+        `Processing late send pong from logs queue [data : ${JSON.stringify(
+          data,
+        )}]`,
       );
 
-      const transaction = await Promisify<Transaction>(this.transactionRepo.get({where: {TxHash: data.txHash}}))
-      if(transaction.TxState === TX_STATE_TYPE.PONG_CONFIRMED){
-        throw new Error('pong already confirmed')
+      const transaction = await Promisify<Transaction>(
+        this.transactionRepo.get({ where: { TxHash: data.txHash } }),
+      );
+      if (transaction.TxState === TX_STATE_TYPE.PONG_CONFIRMED) {
+        throw new Error('pong already confirmed');
       }
       const { error } = await this.transactionRepo.update(
         { TxHash: data.txHash },
