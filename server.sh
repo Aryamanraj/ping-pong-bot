@@ -120,7 +120,7 @@ if [ "${curl_flag}" = true ]; then
     echo -e ""
 
     echo -e "${CYAN}Creating new indexed state:${NC}"
-    # curl --location "$api_url/admin/indexed-state" -H 'x-api-key: admin-api-key' -H 'Content-Type: application/json' --data-raw '{"network":"Sepolia","blockNumber":6504556}'
+    # curl --location "$api_url/admin/indexed-state" -H 'x-api-key: admin-api-key' -H 'Content-Type: application/json' --data-raw '{"network":"Sepolia","blockNumber":6504556, "contractAddress":"0xF44471FcB4fA4c6574B5f65f203Bff074737edec"}'
     echo -e ""
 fi
 
