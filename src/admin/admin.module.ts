@@ -14,19 +14,13 @@ import { CronsHealthController } from './health.controller';
     BullModule.registerQueue({ name: QueueNames.NEW_LOGS }),
     ScheduleModule,
   ],
-  controllers: [
-    AdminController,
-    CronsHealthController,
-  ],
+  controllers: [AdminController, CronsHealthController],
   providers: [AdminService],
 })
 export class AdminModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(LoggerMiddleware)
-      .forRoutes(
-        AdminController,
-        CronsHealthController,
-      );
+      .forRoutes(AdminController, CronsHealthController);
   }
 }
