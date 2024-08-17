@@ -116,7 +116,7 @@ if [ "${curl_flag}" = true ]; then
     echo -e "${YELLOW}Hitting API at $api_url${NC}"
 
     echo -e "${CYAN}Starting late send pong scheduler:${NC}"
-    curl -X POST "$api_url/admin/admin/lateSendPongSettlement/start" -H 'x-api-key: admin-api-key' -H 'Content-Type: application/json' --data-raw '{"timePeriod":"*/1 * * * *"}'
+    curl -X POST "$api_url/admin/lateSendPongSettlement/start" -H 'x-api-key: admin-api-key' -H 'Content-Type: application/json' --data-raw '{"timePeriod":"*/1 * * * *"}'
     echo -e ""
 
     echo -e "${CYAN}Creating new indexed state:${NC}"
