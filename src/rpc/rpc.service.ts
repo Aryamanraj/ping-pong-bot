@@ -224,13 +224,11 @@ export class RpcService implements OnApplicationBootstrap {
       EventTypes.PONG,
       async (pingHash: string, event: PongEvent) => {
         try {
-          // Extract the transaction hash of the Pong transaction
           const txHash = event?.log?.transactionHash;
           const blockNumber = event?.log?.blockNumber;
           const logIndex = event?.log?.index;
 
-          // Extract the original txHash passed to the Pong function
-          const originalTxHash = pingHash; // This represents the `_txHash` passed to the `pong` function
+          const originalTxHash = pingHash;
 
           if (!txHash || !originalTxHash) {
             throw new Error(
@@ -242,7 +240,6 @@ export class RpcService implements OnApplicationBootstrap {
             `Received Pong event with txHash: ${txHash}, originalTxHash: ${originalTxHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
           );
 
-          // Handle the Pong event as needed, using both txHash and originalTxHash
           const eventData: PONG_EVENT_DATA = {
             txHash,
             originalTxHash,
@@ -251,19 +248,8 @@ export class RpcService implements OnApplicationBootstrap {
             logIndex,
           };
 
-          // const { id: jobId } = await this.logsQueue.add(
-          //   QUEUE_JOB_NAMES.PONG_TRANSACTION,
-          //   {
-          //     data: eventData,
-          //   },
-          //   {
-          //     attempts: 3, // retry 3 times max
-          //     backoff: {
-          //       type: 'exponential', // exponential backoff strategy
-          //       delay: 1000, // initial delay of 1s, increasing exponentially
-          //     },
-          //   },
-          // );
+          const { error } = await this.handlePongEventUpdate(eventData);
+          if (error) throw error;
 
           this.logger.info(`Processed Pong event with txHash: ${txHash}`);
         } catch (error) {
@@ -363,6 +349,21 @@ export class RpcService implements OnApplicationBootstrap {
           );
           if (UpdateTxError) throw UpdateTxError;
         }
+        const updatedTransaction = await Promisify<Transaction>(
+          this.transactionRepo.get({ where: { TxHash: data.txHash } }),
+        );
+        if (updatedTransaction.TxState !== TX_STATE_TYPE.PONG_CONFIRMED) {
+          this.logger.info(
+            `Transaction completed but event not heard yet, updating state to ${TX_STATE_TYPE.PONGED}`,
+          );
+          const { error: UpdateTxError } = await this.transactionRepo.update(
+            { TxID: transaction.TxID },
+            {
+              TxState: TX_STATE_TYPE.PONG_CONFIRMED,
+            },
+          );
+          if (UpdateTxError) throw UpdateTxError;
+        }
       } catch (txError) {
         this.logger.error(`Transaction failed: ${txError.message}`);
 
@@ -381,6 +382,39 @@ export class RpcService implements OnApplicationBootstrap {
         `Error processing pong transaction [data : ${JSON.stringify(data)}] : ${
           error.stack
         }`,
+      );
+      return { error };
+    }
+  }
+
+  private async handlePongEventUpdate(
+    eventData: PONG_EVENT_DATA,
+  ): Promise<{ error }> {
+    const { originalTxHash, txHash, blockNumber, timestamp, logIndex } =
+      eventData;
+    try {
+      const block = blockNumber
+        ? await this.provider.getBlock(blockNumber)
+        : null;
+      const { error: UpdateTxError } = await this.transactionRepo.update(
+        { TxHash: originalTxHash },
+        {
+          TxState: TX_STATE_TYPE.PONG_CONFIRMED,
+          PongTxHash: txHash,
+          PongBlockNumber: blockNumber,
+          PongLogIndex: logIndex,
+          PongTimestamp: block?.timestamp ?? timestamp,
+        },
+      );
+      if (UpdateTxError) throw UpdateTxError;
+
+      this.logger.info(
+        `Updated transaction for Pong event with txHash: ${txHash}`,
+      );
+      return { error: null };
+    } catch (error) {
+      this.logger.error(
+        `Error updating transaction for Pong event with txHash: ${txHash} : ${error.stack}`,
       );
       return { error };
     }
