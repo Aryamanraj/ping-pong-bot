@@ -9,34 +9,33 @@ import { TX_STATE_TYPE } from '../../common/constants';
 import { Transaction } from '../../repo/entities/transaction.entity';
 
 @Injectable()
-export class LogObserverService {
+export class LateLogObserverService {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
     private rpcService: RpcService,
     private transactionRepo: TransactionRepoService,
   ) {}
 
-  async handleSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
+  async handleLateSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
     try {
       this.logger.info(
-        `Processing send pong from logs queue [data : ${JSON.stringify(data)}]`,
+        `Processing late send pong from logs queue [data : ${JSON.stringify(data)}]`,
       );
 
       const transaction = await Promisify<Transaction>(this.transactionRepo.get({where: {TxHash: data.txHash}}))
       if(transaction.TxState === TX_STATE_TYPE.PONG_CONFIRMED){
         throw new Error('pong already confirmed')
       }
-
       const { error } = await this.transactionRepo.update(
         { TxHash: data.txHash },
         { TxState: TX_STATE_TYPE.PONGING },
       );
       if (error) throw error;
 
-      const { error: sendPongError } = await this.rpcService.handleSendPong(
+      const { error: lateSendPongError } = await this.rpcService.handleSendPong(
         data,
       );
-      if (sendPongError) throw sendPongError;
+      if (lateSendPongError) throw lateSendPongError;
 
       return { error: null };
     } catch (error) {
