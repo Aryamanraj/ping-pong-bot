@@ -7,7 +7,7 @@ import { ScheduleService } from './schedule.service';
 @Module({
   imports: [
     RepoModule,
-    BullModule.registerQueue({ name: QueueNames.NEW_LOGS }),
+    BullModule.registerQueue({ name: QueueNames.NEW_LOGS }, { name: QueueNames.LATE_LOGS }),
   ],
   providers: [ScheduleService],
   exports: [ScheduleService],

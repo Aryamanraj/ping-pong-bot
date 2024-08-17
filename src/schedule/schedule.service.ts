@@ -25,6 +25,7 @@ export class ScheduleService {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
     @InjectQueue(QueueNames.NEW_LOGS) private newLogsQueue: Queue,
+    @InjectQueue(QueueNames.LATE_LOGS) private lateLogsQueue: Queue,
     private schedulerRegistry: SchedulerRegistry,
     private transactionRepo: TransactionRepoService,
   ) {}
@@ -202,12 +203,12 @@ export class ScheduleService {
           txHash: transaction.TxHash,
           timestamp: Date.now(),
         };
-        const job = await this.newLogsQueue.add(
+        const job = await this.lateLogsQueue.add(
           QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION,
           { data: eventData },
         );
         this.logger.info(
-          `Added processing late send pong settlement job [queue : ${QueueNames.NEW_LOGS}, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${job.id}, with data: ${eventData}]`,
+          `Added processing late send pong settlement job [queue : ${QueueNames.LATE_LOGS}, jobName : ${QUEUE_JOB_NAMES.LATE_PONG_TRANSACTION}, jobId : ${job.id}, with data: ${JSON.stringify(eventData)}]`,
         );
       }
 
