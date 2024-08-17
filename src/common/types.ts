@@ -16,7 +16,7 @@ export const TransactionTypes = {
 };
 
 export enum EVENT_TYPE {
-  CREDITS = 'CREDITS',
-  VOTE = 'VOTE',
-  MULTI_TOKEN_ESCROW = 'MULTI_TOKEN_ESCROW',
+  PING = 'PING',
+  PONG = 'PONG',
+  NEW_PINGER = 'NEW_PINGER',
 }

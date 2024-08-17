@@ -19,7 +19,7 @@ export interface BASE_EVENT_DATA {
 }
 
 export interface NEW_PINGER_EVENT_DATA extends BASE_EVENT_DATA {
-  pinger: ethers.Addressable;
+  newPinger: ethers.Addressable;
   blockNumber: number;
   logIndex: number;
 }
@@ -45,7 +45,7 @@ interface Log {
 
 interface Fragment {
   type: string;
-  inputs: any[]; 
+  inputs: any[];
   name: string;
   anonymous?: boolean;
 }
@@ -59,7 +59,7 @@ interface Emitter {
     receive: boolean;
   };
   runner: {
-    provider: any; 
+    provider: any;
     address: string;
   };
   filters: any;
@@ -71,6 +71,22 @@ export interface PingEvent {
   emitter: Emitter;
   log: Log;
   args: any[];
+  fragment: Fragment;
+}
+
+export interface PongEvent {
+  filter: string;
+  emitter: Emitter;
+  log: Log;
+  args: [string];
+  fragment: Fragment;
+}
+
+export interface NewPingerEvent {
+  filter: string;
+  emitter: Emitter;
+  log: Log;
+  args: [string];
   fragment: Fragment;
 }
 
