@@ -1,6 +1,18 @@
-# PingPongIndexer
+# PingPongIndexer Bot
 
 PingPongIndexer is a blockchain-based indexer service designed to listen for specific events on a smart contract, process those events, and update the corresponding records in a PostgreSQL database. It uses NestJS as the primary framework and integrates with Redis for background job processing. The project includes two primary components: an **Event Listener** and a **Block Processor**. The Event Listener is responsible for listening to live events emitted by the smart contract in real-time, while the Block Processor ensures that any events missed by the Event Listener are captured and processed by periodically scanning the blockchain.
+
+The PingPongIndexer bot designed to listen for `Ping()` events emitted by the contract at `0xa7f42ff7433cb268dd7d59be62b00c30ded28d3d` on the Sepolia network. Upon detecting a `Ping()` event, the bot reliably sends a `pong()` transaction with the hash of the triggering `Ping()` transaction.
+
+### Key Features:
+- **Robust Event Listening**: The bot continuously listens for `Ping()` events and is capable of handling network issues, rate limiting, and other disruptions.
+- **Reliable Transaction Submission**: Ensures that exactly one `pong()` is sent for each `Ping()`, using a well-designed mechanism to track and resume from the last processed block in case of failure.
+- **Error Handling and Resilience**: The bot is equipped to deal with nonce management, gas price spikes, and potential transaction failures, ensuring smooth operation even in adverse conditions.
+
+### Getting Started:
+- **Start Block**: The bot began operation from block number `XXXXX` on the Sepolia network.
+- **Bot Address**: The bot is running at the address `0x...` on Sepolia.
+- **Running the Bot**: Follow the instructions below to deploy and run the bot, ensuring it stays operational continuously.
 
 ## Two Applications: API Server and Indexer
 
