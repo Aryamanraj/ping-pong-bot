@@ -10,8 +10,13 @@ import { ONCHAIN_CONFIG } from '../common/web3';
 import { IndexedState } from '../repo/entities/indexed-state.entity';
 import { RpcService } from '../rpc/rpc.service';
 import { TransactionRepoService } from '../repo/transaction-repo.service';
+import { Transaction } from '../repo/entities/transaction.entity';
 import { Promisify } from '../common/helpers/promisifier';
-import { GetNewTransactionsResult, ParsedLog } from '../common/interfaces';
+import {
+  GetNewTransactionsResult,
+  ParsedLog,
+  PingEventData,
+} from '../common/interfaces';
 
 @Injectable()
 export class BlockService implements OnApplicationBootstrap {
@@ -25,7 +30,7 @@ export class BlockService implements OnApplicationBootstrap {
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
     private configService: ConfigService,
     private idxStateRepo: IndexedStateRepoService,
-    private transactionsRepo: TransactionRepoService,
+    private transactionRepo: TransactionRepoService,
     private rpcService: RpcService,
   ) {
     this.limit = 1000;
@@ -36,12 +41,12 @@ export class BlockService implements OnApplicationBootstrap {
     this.env = (this.configService.get('NODE_ENV') ||
       'development') as keyof typeof defaultConfig;
 
-    this.contractAddress = defaultConfig[this.env].contractAddress;
+    this.contractAddress = defaultConfig[this.env].CONTRACT_ADDRESS;
 
     this.chain = defaultConfig[this.env].CHAIN;
   }
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
+  @Cron(CronExpression.EVERY_10_HOURS)
   async indexBlocks() {
     try {
       if (this.isBlockIndexing) {
@@ -77,9 +82,14 @@ export class BlockService implements OnApplicationBootstrap {
 
       for (const { log, parsedLog } of newTransactionsResult.parsedLogArray) {
         // If already processed, skip
-        const existingTx = await this.transactionsRepo.get({
-          where: { TxHash: log.transactionHash },
-        });
+        const existingTx = await Promisify<Transaction>(
+          this.transactionRepo.get(
+            {
+              where: { TxHash: log.transactionHash },
+            },
+            false,
+          ),
+        );
         if (existingTx) {
           this.logger.info(
             `Transaction already processed: ${log.transactionHash}`,
@@ -94,7 +104,27 @@ export class BlockService implements OnApplicationBootstrap {
         switch (parsedLog.name) {
           case EventTypes.PING:
             console.log(parsedLog);
-            //   await this.rpcService.handlePingEvent(parsedLog);
+            const pingEventData: PingEventData = {
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber,
+              logIndex: log.index,
+            };
+            if (!pingEventData.txHash) {
+              throw new Error('Transaction hash is missing from the event.');
+            }
+
+            this.logger.info(
+              `Received Ping event with txHash: ${
+                pingEventData.txHash
+              }, blockNumber: ${pingEventData.blockNumber}, logIndex: ${
+                pingEventData.logIndex
+              }, event log: ${JSON.stringify(
+                log,
+              )} and parsedLog: ${JSON.stringify(parsedLog)}`,
+            );
+
+            const { error } = await this.rpcService.handlePingEventUpdate(pingEventData);
+            if (error) throw error;
             break;
           case EventTypes.PONG:
             //   await this.rpcService.handlePongEvent(parsedLog);
