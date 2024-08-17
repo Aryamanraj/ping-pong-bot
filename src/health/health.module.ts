@@ -8,7 +8,7 @@ import { LoggerMiddleware } from '../common/middlewares/logger.middleware';
 
 @Module({
   imports: [
-    BullModule.registerQueue({ name: QueueNames.NEW_LOGS }),
+    BullModule.registerQueue({ name: QueueNames.NEW_LOGS }, { name: QueueNames.LATE_LOGS }),
     TerminusModule,
   ],
   controllers: [HealthCheckContoller],

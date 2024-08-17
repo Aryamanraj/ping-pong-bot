@@ -18,8 +18,8 @@ import { ResultWithError } from 'src/common/interfaces';
 export class HealthService extends HealthIndicator {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
-    @InjectQueue(QueueNames.NEW_LOGS)
-    private logsQueue: Queue,
+    @InjectQueue(QueueNames.NEW_LOGS) private logsQueue: Queue,
+    @InjectQueue(QueueNames.LATE_LOGS) private lateLogsQueue: Queue,
     private db: TypeOrmHealthIndicator,
     private schedulerRegistry: SchedulerRegistry,
   ) {
@@ -95,8 +95,13 @@ export class HealthService extends HealthIndicator {
     switch (queueName) {
       case QueueNames.NEW_LOGS:
         return this.logsQueue;
+      case QueueNames.LATE_LOGS:
+        return this.lateLogsQueue;
+      default:
+        this.logger.error(`Queue ${queueName} is not defined`);
+        throw new Error(`Queue ${queueName} is not defined`);
     }
-  }
+  }  
 
   private async isDbHealth(): Promise<HealthIndicatorResult> {
     return await this.db.pingCheck('typeorm');
