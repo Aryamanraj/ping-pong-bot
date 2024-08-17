@@ -46,11 +46,13 @@ export class RpcService implements OnApplicationBootstrap {
   private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
   private contract: ethers.Contract;
+  private contractSend: ethers.Contract;
   private contractAddress: string;
   private pingPongABI: ethers.Interface;
   private env: string;
   private wsProvider: ethers.WebSocketProvider;
   private chain: string;
+  private walletAddress: string;
 
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
@@ -100,6 +102,14 @@ export class RpcService implements OnApplicationBootstrap {
       this.pingPongABI,
       this.wallet.connect(this.wsProvider),
     );
+
+    this.contractSend = new ethers.Contract(
+      this.contractAddress,
+      this.pingPongABI,
+      this.wallet,
+    );
+
+    this.walletAddress = this.wallet.address.toLowerCase();
 
     this.logger.info(`Connected to Ethereum RPC!`);
   }
@@ -273,7 +283,7 @@ export class RpcService implements OnApplicationBootstrap {
 
       const result: GetNewTransactionsResult = {
         parsedLogArray: parsedLogs,
-        toBlockNumber: toBlock - 1,
+        toBlockNumber: toBlock,
       };
       if (parsedLogs.length > 0) {
         this.logger.info(
@@ -294,15 +304,14 @@ export class RpcService implements OnApplicationBootstrap {
   async handleSendPong(data: BASE_EVENT_DATA): Promise<{ error }> {
     try {
       this.logger.info(`Processing send pong [data : ${JSON.stringify(data)}]`);
-
+  
       const transaction = await Promisify<Transaction>(
         this.transactionRepo.get({ where: { TxHash: data.txHash } }),
       );
-
-      // throw error if incorrect tx state
+  
       if (transaction.TxState != TX_STATE_TYPE.PONGING) {
         this.logger.error(
-          `error in processing send pong transaction, incorrect state: ${
+          `Error in processing send pong transaction, incorrect state: ${
             transaction.TxState
           }  [data : ${JSON.stringify(data)}]`,
         );
@@ -310,53 +319,65 @@ export class RpcService implements OnApplicationBootstrap {
           `Incorrect state: ${transaction.TxState} for sending pong transaction expected state to be: ${TX_STATE_TYPE.PONGING}`,
         );
       }
-      try {
-        // Call the pong function on the contract using the txHash from the event data
-        const tx = await this.contract.pong(ethers.id(data.txHash));
-
-        this.logger.info(`Pong transaction sent. Transaction hash: ${tx.hash}`);
-        const receipt = await tx.wait();
-        this.logger.info(
-          `Pong receipt generated. Transaction hash: ${
-            tx.hash
-          }, Tx receipt: ${JSON.stringify(receipt)}`,
-        );
-        if (receipt.status !== 1) {
-          const { error: UpdateTxError } = await this.transactionRepo.update(
-            { TxID: transaction.TxID },
-            {
-              TxState: TX_STATE_TYPE.PINGED,
-            },
+  
+      let retries = 0;
+      const maxRetries = 3;
+      const timeoutDuration = 120000; // 2 minutes timeout
+  
+      while (retries < maxRetries) {
+        try {
+          this.logger.info(`Calling on-chain function to send pong [data : ${JSON.stringify(data)}]`);
+  
+          const transactionPromise = this.contractSend.pong(data.txHash);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Transaction timed out')), timeoutDuration)
           );
-          if (UpdateTxError) throw UpdateTxError;
-        }
-        const updatedTransaction = await Promisify<Transaction>(
-          this.transactionRepo.get({ where: { TxHash: data.txHash } }),
-        );
-        if (updatedTransaction.TxState !== TX_STATE_TYPE.PONG_CONFIRMED) {
+  
+          const tx = await Promise.race([transactionPromise, timeoutPromise]);
+  
+          this.logger.info(`Pong transaction sent. Transaction hash: ${tx.hash}`);
+          const receipt = await tx.wait();
           this.logger.info(
-            `Transaction completed but event not heard yet, updating state to ${TX_STATE_TYPE.PONGED}`,
+            `Pong receipt generated. Transaction hash: ${
+              tx.hash
+            }, Tx receipt: ${JSON.stringify(receipt)}`,
           );
-          const { error: UpdateTxError } = await this.transactionRepo.update(
-            { TxID: transaction.TxID },
-            {
-              TxState: TX_STATE_TYPE.PONG_CONFIRMED,
-            },
-          );
-          if (UpdateTxError) throw UpdateTxError;
+  
+          if (receipt.status !== 1) {
+            this.logger.warn(`Transaction failed. Updating state back to PINGED for reprocessing.`);
+            await this.transactionRepo.update(
+              { TxID: transaction.TxID },
+              {
+                TxState: TX_STATE_TYPE.PINGED,
+              },
+            );
+          } else {
+            this.logger.info(`Transaction succeeded. Updating state to PONG_CONFIRMED.`);
+            await this.transactionRepo.update(
+              { TxID: transaction.TxID },
+              {
+                TxState: TX_STATE_TYPE.PONG_CONFIRMED,
+              },
+            );
+          }
+          break; // Exit the loop if successful
+  
+        } catch (txError) {
+          this.logger.error(`Transaction attempt ${retries + 1} failed: ${txError.message}`);
+          retries++;
+          if (retries >= maxRetries) {
+            this.logger.error(`Max retries reached. Failing transaction.`);
+            await this.transactionRepo.update(
+              { TxID: transaction.TxID },
+              {
+                TxState: TX_STATE_TYPE.PINGED,
+              },
+            );
+            throw txError;
+          }
         }
-      } catch (txError) {
-        this.logger.error(`Transaction failed: ${txError.message}`);
-
-        await this.transactionRepo.update(
-          { TxID: transaction.TxID },
-          {
-            TxState: TX_STATE_TYPE.PINGED,
-          },
-        );
-
-        throw txError;
       }
+  
       return { error: null };
     } catch (error) {
       this.logger.error(
@@ -367,14 +388,30 @@ export class RpcService implements OnApplicationBootstrap {
       return { error };
     }
   }
+  
 
   async handlePongEventUpdate(eventData: PONG_EVENT_DATA): Promise<{ error }> {
     const { originalTxHash, txHash, blockNumber, timestamp, logIndex } =
       eventData;
     try {
       const block = blockNumber
-        ? await this.provider.getBlock(blockNumber)
-        : null;
+      ? await this.provider.getBlock(blockNumber)
+      : null;
+
+    const transaction = await this.provider.getTransaction(txHash);
+
+    if (!transaction) {
+      throw new Error(`Transaction with hash ${txHash} not found in block ${blockNumber}`);
+    }
+
+    const senderAddress = transaction.from.toLowerCase();
+
+    // Check if the sender's address matches the server's wallet address
+    if (senderAddress !== this.walletAddress) {
+      this.logger.info(`Ignoring Pong event not sent by this server: ${txHash}`);
+      return { error: null };
+    }
+
       const { error: UpdateTxError } = await this.transactionRepo.update(
         { TxHash: originalTxHash },
         {
