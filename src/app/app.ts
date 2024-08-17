@@ -30,7 +30,7 @@ async function bootstrap() {
 
 function configureSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
-    .setTitle('Catoff APIs')
+    .setTitle('PingPong APIs')
     .setVersion('1.0')
     .addBearerAuth(
       {
