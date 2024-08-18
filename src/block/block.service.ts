@@ -52,12 +52,12 @@ export class BlockService implements OnApplicationBootstrap {
     try {
       if (this.isBlockIndexing) {
         this.logger.info(
-          'Already indexing the blocks... Sleeping for 30 seconds',
+          '[Block] Already indexing the blocks... Sleeping for 30 seconds',
         );
         return;
       }
       this.logger.info(
-        `Indexing blocks on ${this.chain} chain, on contract addresses: ${this.contractAddress}`,
+        `[Block] Indexing blocks on ${this.chain} chain, on contract addresses: ${this.contractAddress}`,
       );
 
       this.isBlockIndexing = true;
@@ -70,11 +70,11 @@ export class BlockService implements OnApplicationBootstrap {
       );
 
       this.logger.info(
-        `Starting from block number ${indexedState.BlockNumber}`,
+        `[Block] Starting from block number ${indexedState.BlockNumber}`,
       );
       const fromBlock = indexedState.BlockNumber + 1;
       this.logger.info(
-        `Fetching next transactions within ${this.limit} blocks `,
+        `[Block] Fetching next transactions within ${this.limit} blocks `,
       );
       // Get new transactions from the blockchain
       const newTransactionsResult = await Promisify<GetNewTransactionsResult>(
@@ -93,14 +93,14 @@ export class BlockService implements OnApplicationBootstrap {
         );
         if (existingTx) {
           this.logger.info(
-            `Transaction already processed: ${log.transactionHash}`,
+            `[Block] Transaction already processed: ${log.transactionHash}`,
           );
           continue;
         }
 
         // Process each event in the transaction
         this.logger.info(
-          `Processing event: ${parsedLog.name}, transaction: ${log.transactionHash}`,
+          `[Block] Processing event: ${parsedLog.name}, transaction: ${log.transactionHash}`,
         );
         switch (parsedLog.name) {
           case EventTypes.PING:
@@ -110,11 +110,11 @@ export class BlockService implements OnApplicationBootstrap {
               logIndex: log.index,
             };
             if (!pingEventData.txHash) {
-              throw new Error('Transaction hash is missing from the event.');
+              throw new Error('[Block] Transaction hash is missing from the event.');
             }
 
             this.logger.info(
-              `Received Ping event with txHash: ${
+              `[Block] Received Ping event with txHash: ${
                 pingEventData.txHash
               }, blockNumber: ${pingEventData.blockNumber}, logIndex: ${
                 pingEventData.logIndex
@@ -140,7 +140,7 @@ export class BlockService implements OnApplicationBootstrap {
             }
 
             this.logger.info(
-              `Received Pong event with txHash: ${
+              `[Block] Received Pong event with txHash: ${
                 pongEventData.txHash
               }, blockNumber: ${pongEventData.blockNumber}, logIndex: ${
                 pongEventData.logIndex
@@ -162,12 +162,12 @@ export class BlockService implements OnApplicationBootstrap {
               blockNumber: log.blockNumber,
               logIndex: log.index,
             };
-            if (!pongEventData.txHash) {
+            if (!newPingerEventData.txHash) {
               throw new Error('Transaction hash is missing from the event.');
             }
 
             this.logger.info(
-              `Received new pinger event with txHash: ${
+              `[Block] Received new pinger event with txHash: ${
                 newPingerEventData.txHash
               }, blockNumber: ${newPingerEventData.blockNumber}, logIndex: ${
                 newPingerEventData.logIndex

@@ -73,7 +73,8 @@ export class RpcService implements OnApplicationBootstrap {
 
   private async initializeConfig(defaultConfig) {
     const _nodeUrl = this.configService.get('NODE_URL');
-    const _nodeWssUrl = this.configService.get('NODE__WSS_URL');
+    const _nodeWssUrl = this.configService.get('NODE_WSS_URL');
+
     this.provider = new ethers.JsonRpcProvider(
       _nodeUrl ? _nodeUrl : defaultConfig[this.env].NODE_URL,
     );
@@ -88,6 +89,7 @@ export class RpcService implements OnApplicationBootstrap {
       this.provider,
     );
     this.chain = defaultConfig[this.env].CHAIN;
+
     const idxState = await Promisify<IndexedState>(
       this.indexStateRepo.get({ where: { Network: this.chain } }),
     );
@@ -97,10 +99,17 @@ export class RpcService implements OnApplicationBootstrap {
 
   private async initConnection() {
     this.logger.info(`Initializing connection to Ethereum RPC...`);
+
     this.contract = new ethers.Contract(
       this.contractAddress,
       this.pingPongABI,
       this.wallet.connect(this.wsProvider),
+    );
+
+    this.logger.info(
+      `Contract Initialized with ws provider: ${JSON.stringify(
+        this.wsProvider,
+      )}`,
     );
 
     this.contractSend = new ethers.Contract(
@@ -116,7 +125,9 @@ export class RpcService implements OnApplicationBootstrap {
 
   private async subscribeToEvents() {
     this.logger.info(
-      `Adding event listeners to ping pong contract on address ${this.contractAddress}`,
+      `[rpc.subscribeToEvents] Adding event listeners to ping pong contract on address ${JSON.stringify(
+        this.contractAddress,
+      )}`,
     );
 
     this.contract.on(EventTypes.PING, async (event: PingEvent) => {
@@ -129,11 +140,13 @@ export class RpcService implements OnApplicationBootstrap {
           logIndex: (event?.log?.index as number) ?? null,
         };
         if (!pingEventData.txHash) {
-          throw new Error('Transaction hash is missing from the event.');
+          throw new Error(
+            '[rpc.subscribeToEvents] Transaction hash is missing from the event.',
+          );
         }
 
         this.logger.info(
-          `Received Ping event with txHash: ${
+          `[rpc.subscribeToEvents] Received Ping event with txHash: ${
             pingEventData.txHash
           }, blockNumber: ${pingEventData.blockNumber}, logIndex: ${
             pingEventData.logIndex
@@ -163,10 +176,12 @@ export class RpcService implements OnApplicationBootstrap {
           },
         );
 
-        this.logger.info(`Added new join challenge job for jobId: ${jobId}`);
+        this.logger.info(
+          `[rpc.subscribeToEvents] Added new join challenge job for jobId: ${jobId}`,
+        );
       } catch (error) {
         this.logger.error(
-          `Error processing Ping event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
+          `[rpc.subscribeToEvents] Error processing Ping event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
         );
       }
     });
@@ -184,12 +199,12 @@ export class RpcService implements OnApplicationBootstrap {
           // The newPingerAddress is directly provided by the event arguments
           if (!txHash || !newPingerAddress) {
             throw new Error(
-              'Transaction hash or newPinger address is missing from the event.',
+              '[rpc.subscribeToEvents] Transaction hash or newPinger address is missing from the event.',
             );
           }
 
           this.logger.info(
-            `Received NewPinger event with txHash: ${txHash}, newPingerAddress: ${newPingerAddress}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
+            `[rpc.subscribeToEvents] Received NewPinger event with txHash: ${txHash}, newPingerAddress: ${newPingerAddress}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
           );
 
           // Handle the NewPinger event as needed, using the newPingerAddress and txHash
@@ -203,10 +218,12 @@ export class RpcService implements OnApplicationBootstrap {
           const { error } = await this.handleNewPingerEventUpdate(eventData);
           if (error) throw error;
 
-          this.logger.info(`Processed NewPinger event with txHash: ${txHash}`);
+          this.logger.info(
+            `[rpc.subscribeToEvents] Processed NewPinger event with txHash: ${txHash}`,
+          );
         } catch (error) {
           this.logger.error(
-            `Error processing NewPinger event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
+            `[rpc.subscribeToEvents] Error processing NewPinger event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
           );
         }
       },
@@ -225,12 +242,12 @@ export class RpcService implements OnApplicationBootstrap {
 
           if (!txHash || !originalTxHash) {
             throw new Error(
-              'Transaction hash or original txHash is missing from the event.',
+              '[rpc.subscribeToEvents] Transaction hash or original txHash is missing from the event.',
             );
           }
 
           this.logger.info(
-            `Received Pong event with txHash: ${txHash}, originalTxHash: ${originalTxHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
+            `[rpc.subscribeToEvents] Received Pong event with txHash: ${txHash}, originalTxHash: ${originalTxHash}, blockNumber: ${blockNumber}, logIndex: ${logIndex}`,
           );
 
           const eventData: PONG_EVENT_DATA = {
@@ -244,17 +261,19 @@ export class RpcService implements OnApplicationBootstrap {
           const { error } = await this.handlePongEventUpdate(eventData);
           if (error) throw error;
 
-          this.logger.info(`Processed Pong event with txHash: ${txHash}`);
+          this.logger.info(
+            `[rpc.subscribeToEvents] Processed Pong event with txHash: ${txHash}`,
+          );
         } catch (error) {
           this.logger.error(
-            `Error processing Pong event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
+            `[rpc.subscribeToEvents] Error processing Pong event with txHash: ${event?.log?.transactionHash} : ${error.stack}`,
           );
         }
       },
     );
 
     this.logger.info(
-      `Listening to [events : [${Object.values(
+      `[rpc.subscribeToEvents] Listening to [events : [${Object.values(
         EventTypes,
       )}], contract address : [${JSON.stringify(this.contractAddress)}]]...`,
     );
@@ -265,12 +284,14 @@ export class RpcService implements OnApplicationBootstrap {
     limit = 1000,
   ): Promise<ResultWithError> {
     try {
-      this.logger.info(`Fetching transactions from block ${fromBlock}`);
+      this.logger.info(
+        `[rpc.getNewTransactions] Fetching transactions from block ${fromBlock}`,
+      );
       const getLatestBlock = await this.provider.getBlockNumber();
       const toBlock =
         getLatestBlock - fromBlock > limit ? fromBlock + limit : getLatestBlock;
       this.logger.info(
-        `Fetching transactions from block: ${fromBlock} to block: ${toBlock}`,
+        `[rpc.getNewTransactions] Fetching transactions from block: ${fromBlock} to block: ${toBlock}`,
       );
       const logs = await this.provider.getLogs({
         address: this.contractAddress,
@@ -298,7 +319,9 @@ export class RpcService implements OnApplicationBootstrap {
       }
       return { data: result, error: null };
     } catch (error) {
-      this.logger.error(`Error fetching new transactions: ${error.stack}`);
+      this.logger.error(
+        `[rpc.getNewTransactions] Error fetching new transactions: ${error.stack}`,
+      );
       return { data: null, error };
     }
   }
